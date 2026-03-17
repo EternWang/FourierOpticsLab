@@ -1,87 +1,85 @@
 # Fourier Optics Lab (4f microscope): data analysis + uncertainty propagation
 
-This repository packages a Fourier optics / Fourier-plane filtering lab as a **reproducible data-analysis project**.
-It includes:
+This repository turns a 4f microscope lab into a reproducible Python analysis project. Starting from raw CSV measurements, it reproduces the report numbers, propagates uncertainties analytically, exports machine-readable results, and generates figures that GitHub can render directly.
 
-- a publication-style LaTeX report (`report/`)
-- raw measurements with uncertainties (`data/raw/`)
-- reproducible calculations + plots (`analysis/`)
+## What this repo shows
 
-**Author:** **Hongyu Wang**  
-**Lab partners:** (edit in `report/main.tex` if needed)
+- Data analysis in `numpy`, `pandas`, and `matplotlib`
+- Constrained regression for the screen-angle method
+- Analytic uncertainty propagation across multiple measurement chains
+- Comparison of independent experimental methods, not just a single final number
+- Reproducible outputs in notebook, CSV, JSON, and PDF form
 
----
+## Scientific question
 
-## Project summary 
+How consistent are three independent estimates of the grating period in a Fourier optics lab, and which method is most defensible once random and systematic uncertainty are separated?
 
-### Experiment 1 — Grating period, three independent methods
-We estimate the grating period \(d\) using:
+## Key results
 
-1) **Screen-angle geometry** (manual distance measurements + regression)  
-2) **Calibrated camera image** (object-plane calibration + discrete period counting)  
-3) **Fourier-plane slit cutoff** (spatial-frequency cutoff in the Fourier plane)
+| Measurement route | Result for grating period d (um) | Main idea | Interpretation |
+| --- | ---: | --- | --- |
+| Screen-angle geometry | 9.87 +/- 0.26 | Through-origin regression of diffraction spacing vs screen distance | Good consistency, but largest random uncertainty |
+| Camera calibration | 9.92 +/- 0.11 | Calibrated object-plane pixel scale and period counting | Best overall method in this dataset |
+| Fourier-plane slit cutoff | 10.83 +/- 0.05 | Spatial-frequency cutoff inferred from slit width | Reported sigma is random-only; systematics dominate |
 
-Key random-uncertainty results (see `report/main.pdf`):
+Additional quantitative result:
 
-- \(d_{\mathrm{screen}} = 9.87 \pm 0.26\ \mu\mathrm{m}\)  
-- \(d_{\mathrm{cam}} = 9.92 \pm 0.11\ \mu\mathrm{m}\)  
-- \(d_{\mathrm{slit}} = 10.83 \pm 0.05\ \mu\mathrm{m}\) *(random only; total uncertainty dominated by systematics)*
+- Abbe-limit estimate: `dx_min ~= 3.96 um`, consistent with resolving the `6 um` feature more clearly than the `4 um` feature.
 
-The **camera method** is the most defensible overall because it uses an explicit object-plane calibration chain and
-a threshold-free count of periods.
+## Analysis outputs
 
-### Experiment 2 — Abbe diffraction limit
-Using the manual's condition \(\Delta x_{\min} = 0.61\lambda/\mathrm{NA}\), we estimate \(\Delta x_{\min} \approx 4.0\ \mu\mathrm{m}\),
-consistent with the qualitative difference between the 4 µm (F1) and 6 µm (F2) targets.
+The repository is set up so a reviewer can see the core analysis without opening the PDF first.
 
-### Experiment 3 — Bright-field vs dark-field (Fourier-plane filtering)
-Blocking the Fourier-plane **zero order** suppresses low spatial frequencies and enhances edge/fine-structure contrast
-in diatom imaging (optical high-pass filtering).
+**Screen-angle regression**
 
----
+![Screen-angle fit](analysis/output/screen_fit.png)
 
-## Reproducibility (run the analysis)
+**Method comparison with propagated uncertainties**
+
+![Grating-method comparison](analysis/output/grating_method_comparison.png)
+
+## Uncertainty propagation strategy
+
+The Python workflow does more than fit a line. It carries uncertainty through each calculation chain.
+
+For the screen-angle method:
+
+```text
+y = mL
+theta = arctan(m)
+d = lambda / sin(theta)
+sigma_theta = sigma_m / (1 + m^2)
+sigma_d = |dd/dtheta| sigma_theta
+```
+
+For the camera method, the script propagates uncertainty from calibration pixels to object-plane scale and then into the final period estimate. For the slit-cutoff method, it reports the random component directly and also computes a simple systematic cross-check against the camera-based estimate.
+
+## Reproduce the analysis
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate
 pip install -r analysis/requirements.txt
-
 python analysis/analyze.py
 ```
 
-Outputs:
-- `data/processed/results.json`
-You can also review the executed notebook: `analysis/FourierOptics_Analysis.ipynb`.
+Main outputs:
 
-- `data/processed/grating_results.csv`
-- plots in `analysis/output/` (fit line, residuals, uncertainty comparison)
-
----
-
-## Build the LaTeX report locally (optional)
-
-If you have LaTeX installed:
-
-```bash
-cd report
-pdflatex -interaction=nonstopmode main.tex
-pdflatex -interaction=nonstopmode main.tex
-```
-
-Or upload `report/` to Overleaf.
-
----
+- `analysis/FourierOptics_Analysis.ipynb`: executed notebook rendered by GitHub
+- `data/processed/results.json`: structured summary for all experiments
+- `data/processed/grating_results.csv`: compact comparison table
+- `analysis/output/*.png`: regression, residual, and uncertainty figures
+- `report/main.pdf`: polished lab report with derivations and discussion
 
 ## Repository structure
 
+```text
+analysis/        Python scripts, notebook, and generated figures
+data/raw/        Raw measurements with assigned uncertainties
+data/processed/  Machine-readable outputs generated by the analysis
+report/          LaTeX source and compiled PDF report
+docs/            Supporting notes
 ```
-report/          LaTeX source + compiled PDF (figures are **lab-provided**)
-data/raw/        raw measurements + assigned uncertainties (CSV)
-analysis/        Python calculations + plots that reproduce the report numbers
-docs/            (optional) extra writeups
-```
 
----
+## Why this is a strong portfolio project
 
-
+This is not just a lab writeup. It shows a full analysis pipeline: raw experimental inputs, explicit assumptions, uncertainty propagation, reproducible code, machine-readable outputs, and figures that support the scientific conclusion.

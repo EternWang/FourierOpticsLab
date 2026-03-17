@@ -1,34 +1,33 @@
-# Analysis (reproducibility)
+# Analysis
 
-This folder contains code that reproduces the quantitative results reported in `report/main.pdf`.
+This folder contains the reproducible Python workflow behind the numbers in [report/main.pdf](../report/main.pdf).
 
-## Two ways to review the analysis
+## Review options
 
-### 1) Jupyter notebook (recommended for quick review)
-Open:
+### 1. Executed notebook
+Open [FourierOptics_Analysis.ipynb](./FourierOptics_Analysis.ipynb).
 
-- `FourierOptics_Analysis.ipynb`
+The notebook is already executed, so GitHub renders the figures and printed values directly in the browser.
 
-It is **executed** (plots + printed values are already embedded) so GitHub renders it nicely.
-
-### 2) Script (recommended for automated reproducibility)
+### 2. Standalone script
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate
 pip install -r analysis/requirements.txt
-
 python analysis/analyze.py
 ```
 
-Outputs:
-- `data/processed/results.json` – full structured results
-- `data/processed/grating_results.csv` – compact table for Experiment 1
-- `analysis/output/*.png` – plots (fit, residuals, uncertainty comparison)
+Generated outputs:
+- `data/processed/results.json`: full structured summary
+- `data/processed/grating_results.csv`: compact method-comparison table
+- `analysis/output/screen_fit.png`: through-origin regression figure
+- `analysis/output/screen_residuals.png`: residual diagnostics
+- `analysis/output/random_uncertainty_budget.png`: random-uncertainty comparison
+- `analysis/output/grating_method_comparison.png`: period estimates with propagated uncertainties
 
-## What this demonstrates (for reviewers)
+## What this demonstrates
 
-- **Regression with constraints:** through-origin fit for the screen-angle method.
-- **Uncertainty propagation:** analytic error propagation from slope → angle → period.
-- **Uncertainty budgeting:** random components (repeatability) and systematic considerations (see the report Discussion).
-- **Reproducibility:** raw inputs are stored as CSV under `data/raw/`.
+- Constrained regression for the screen-angle method
+- Analytic uncertainty propagation across a calibration chain
+- Comparison of independent measurement methods
+- Clean export of results to CSV and JSON for reuse

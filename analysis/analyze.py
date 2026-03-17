@@ -1,26 +1,24 @@
 #!/usr/bin/env python3
 """Reproduce the core numerical results in the Fourier Optics Lab report.
 
-This script is designed for a GitHub portfolio: it takes raw measurements (with uncertainties),
-performs regression and uncertainty propagation, and writes both a machine-readable summary
-(CSV/JSON) and human-readable plots.
+This script starts from raw CSV measurements, performs regression and
+uncertainty propagation, and writes both machine-readable summaries
+(CSV/JSON) and publication-ready plots.
 
-The calculations mirror Appendix B of the report (screen-angle regression, camera calibration,
-slit cutoff, and Abbe-limit estimate).
-
-Author: Hongyu Wang
+The calculations mirror Appendix B of the report: screen-angle
+regression, camera calibration, slit cutoff, and Abbe-limit estimate.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 import json
 import math
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -31,7 +29,7 @@ OUT = ROOT / "analysis" / "output"
 
 @dataclass
 class ScreenFitResult:
-    slope_m: float           # tan(theta)
+    slope_m: float  # tan(theta)
     slope_sigma: float
     theta_rad: float
     theta_sigma: float
@@ -69,23 +67,17 @@ def ensure_dirs() -> None:
 
 
 def through_origin_regression(x: np.ndarray, y: np.ndarray) -> tuple[float, float, float]:
-    """Fit y = m x through the origin and return (m, sigma_m, r2).
-
-    sigma_m uses the standard error formula for a constrained through-origin fit.
-    r2 is computed relative to the origin-constrained model.
-    """
+    """Fit y = m x through the origin and return (m, sigma_m, r2)."""
     n = len(x)
     if n < 2:
         raise ValueError("Need at least 2 points for regression.")
 
     m = float(np.sum(x * y) / np.sum(x * x))
     residuals = y - m * x
-    # Standard error for through-origin regression:
     sigma_m = math.sqrt(float(np.sum(residuals**2) / ((n - 1) * np.sum(x**2))))
 
-    # R^2 for through-origin model:
     ss_res = float(np.sum(residuals**2))
-    ss_tot = float(np.sum(y**2))  # since mean is effectively 0 in constrained model
+    ss_tot = float(np.sum(y**2))
     r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else float("nan")
     return m, sigma_m, r2
 
@@ -101,7 +93,7 @@ def screen_angle_method(lam_nm: float = 550.0) -> ScreenFitResult:
     sigma_theta = sigma_m / (1.0 + m**2)
 
     lam = lam_nm * 1e-9
-    d = lam / math.sin(theta)  # meters
+    d = lam / math.sin(theta)
     sigma_d = abs(lam * math.cos(theta) / (math.sin(theta) ** 2)) * sigma_theta
 
     return ScreenFitResult(
@@ -155,13 +147,10 @@ def slit_cutoff_method(d_cam_um: float, lam_nm: float = 550.0) -> SlitResult:
     d = 2.0 * f * lam / w
     sig_d = d * (sig_w / w)
 
-    # Systematics cross-check: predicted w_true from the camera-estimated period
     d_cam = d_cam_um * 1e-6
     w_true = 2.0 * f * lam / d_cam
     w_true_in = w_true / inch
     delta_w_in = w_true_in - w_in
-
-    # Simple mis-centering estimate: delta ~ Δw/2
     delta_center_mm = abs(delta_w_in) * inch * 1e3 / 2.0
 
     return SlitResult(
@@ -180,7 +169,6 @@ def abbe_limit(lam_nm: float = 550.0) -> AbbeResult:
     n = float(df["n"])
 
     lam = lam_nm * 1e-9
-    # sin(alpha) ≈ D/(2f) for small angles; NA = n sin(alpha)
     NA = n * (D / (2.0 * f))
     dx_min = 0.61 * lam / NA
     return AbbeResult(NA=NA, dx_min_um=dx_min * 1e6)
@@ -191,7 +179,6 @@ def plot_screen_fit(screen: ScreenFitResult) -> None:
     L = df["L_cm"].to_numpy(dtype=float)
     y = df["y_cm"].to_numpy(dtype=float)
 
-    # Fit line
     L_line = np.linspace(0, L.max() * 1.05, 200)
     y_line = screen.slope_m * L_line
 
@@ -200,13 +187,12 @@ def plot_screen_fit(screen: ScreenFitResult) -> None:
     plt.plot(L_line, y_line, label=f"fit: y = {screen.slope_m:.5f} L")
     plt.xlabel("Screen distance L (cm)")
     plt.ylabel("Order separation y (cm)")
-    plt.title("Screen-angle method: y vs L (through-origin fit)")
+    plt.title("Screen-angle method: y vs L")
     plt.legend()
     plt.tight_layout()
     plt.savefig(OUT / "screen_fit.png", dpi=200)
     plt.close()
 
-    # Residuals
     plt.figure()
     residuals = y - screen.slope_m * L
     plt.axhline(0, linewidth=1)
@@ -220,16 +206,58 @@ def plot_screen_fit(screen: ScreenFitResult) -> None:
 
 
 def plot_uncertainty_budget(screen: ScreenFitResult, cam: CameraResult, slit: SlitResult) -> None:
-    # Random-only uncertainties:
     methods = ["screen", "camera", "slit (random)"]
     sigmas = [screen.d_sigma_um, cam.d_sigma_um, slit.d_sigma_um]
 
     plt.figure()
-    plt.bar(methods, sigmas)
-    plt.ylabel("Random uncertainty σ_d (µm)")
+    plt.bar(methods, sigmas, color=["#4C78A8", "#54A24B", "#E45756"])
+    plt.ylabel("Random uncertainty sigma_d (um)")
     plt.title("Experiment 1: random uncertainty comparison")
     plt.tight_layout()
     plt.savefig(OUT / "random_uncertainty_budget.png", dpi=200)
+    plt.close()
+
+
+def plot_grating_method_comparison(
+    screen: ScreenFitResult, cam: CameraResult, slit: SlitResult
+) -> None:
+    methods = ["Screen angle", "Camera calibration", "Slit cutoff"]
+    estimates = np.array([screen.d_um, cam.d_um, slit.d_um], dtype=float)
+    sigmas = np.array([screen.d_sigma_um, cam.d_sigma_um, slit.d_sigma_um], dtype=float)
+    ypos = np.arange(len(methods))
+
+    plt.figure(figsize=(7.2, 3.8))
+    plt.errorbar(
+        estimates,
+        ypos,
+        xerr=sigmas,
+        fmt="o",
+        color="#1F77B4",
+        ecolor="#1F77B4",
+        capsize=4,
+        markersize=7,
+    )
+    plt.axvline(
+        cam.d_um,
+        color="#54A24B",
+        linestyle="--",
+        linewidth=1.2,
+        label="camera estimate",
+    )
+    plt.yticks(ypos, methods)
+    plt.xlabel("Estimated grating period d (um)")
+    plt.title("Experiment 1: independent grating-period estimates")
+    plt.annotate(
+        "slit width is systematic-dominated",
+        xy=(slit.d_um + slit.d_sigma_um, ypos[2]),
+        xytext=(11.15, ypos[2] + 0.35),
+        arrowprops={"arrowstyle": "-", "color": "#666666"},
+        fontsize=9,
+        color="#444444",
+    )
+    plt.legend(loc="lower right")
+    plt.tight_layout()
+    plt.savefig(OUT / "grating_method_comparison.png", dpi=200)
     plt.close()
 
 
@@ -241,7 +269,6 @@ def main() -> None:
     slit = slit_cutoff_method(d_cam_um=cam.d_um, lam_nm=550.0)
     abbe = abbe_limit(lam_nm=550.0)
 
-    # Save summary (CSV + JSON)
     summary = {
         "screen": asdict(screen),
         "camera": asdict(cam),
@@ -250,7 +277,7 @@ def main() -> None:
     }
 
     (DATA_PROCESSED / "results.json").write_text(json.dumps(summary, indent=2))
-    # Flat CSV for quick viewing
+
     rows = [
         {"method": "screen", "d_um": screen.d_um, "sigma_rand_um": screen.d_sigma_um},
         {"method": "camera", "d_um": cam.d_um, "sigma_rand_um": cam.d_sigma_um},
@@ -258,16 +285,15 @@ def main() -> None:
     ]
     pd.DataFrame(rows).to_csv(DATA_PROCESSED / "grating_results.csv", index=False)
 
-    # Plots
     plot_screen_fit(screen)
     plot_uncertainty_budget(screen, cam, slit)
+    plot_grating_method_comparison(screen, cam, slit)
 
-    # Print a concise console summary
     print("=== Fourier Optics Lab: Reproduced results ===")
-    print(f"Screen-angle: d = {screen.d_um:.2f} ± {screen.d_sigma_um:.2f} µm (random), R²={screen.r2:.3f}")
-    print(f"Camera:       d = {cam.d_um:.2f} ± {cam.d_sigma_um:.2f} µm (random)")
-    print(f"Slit cutoff:  d = {slit.d_um:.2f} ± {slit.d_sigma_um:.2f} µm (random)")
-    print(f"Abbe limit:   NA ≈ {abbe.NA:.3f}, Δx_min ≈ {abbe.dx_min_um:.2f} µm")
+    print(f"Screen-angle: d = {screen.d_um:.2f} +/- {screen.d_sigma_um:.2f} um (random), R^2 = {screen.r2:.3f}")
+    print(f"Camera:       d = {cam.d_um:.2f} +/- {cam.d_sigma_um:.2f} um (random)")
+    print(f"Slit cutoff:  d = {slit.d_um:.2f} +/- {slit.d_sigma_um:.2f} um (random)")
+    print(f"Abbe limit:   NA ~= {abbe.NA:.3f}, dx_min ~= {abbe.dx_min_um:.2f} um")
     print()
     print("Outputs written to:")
     print(f"  {DATA_PROCESSED}")
